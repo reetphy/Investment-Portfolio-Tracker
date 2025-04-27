@@ -50,7 +50,7 @@ git clone https://github.com/yourusername/investment-portfolio-tracker.git
 cd investment-portfolio-tracker
 ```
 
-### 2. Run the app
+## Run the app
 
 After installing the dependencies, run the Streamlit app:
 
