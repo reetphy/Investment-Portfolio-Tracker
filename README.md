@@ -48,4 +48,12 @@ The tool uses **Yahoo Finance** to fetch historical stock data and visualizes it
 ```bash
 git clone https://github.com/yourusername/investment-portfolio-tracker.git
 cd investment-portfolio-tracker
+```
 
+### 2. Run the app
+
+After installing the dependencies, run the Streamlit app:
+
+```bash
+streamlit run portfolio_tracker.py
+```
