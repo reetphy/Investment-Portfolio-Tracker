@@ -55,7 +55,7 @@ def download_data(tickers, start, end):
 
 def calculate_metrics(prices, weights, risk_free_rate):
     # 1. Portfolio value (buy and hold)
-    normalized_prices = prices / prices.iloc[0]
+    normalized_prices = prices / prices.iloc[1]
     portfolio = (prices * weights).sum(axis=1)
     #portfolio = (normalized_prices * weights).sum(axis=1)
 
