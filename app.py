@@ -28,13 +28,8 @@ with st.sidebar:
             "Performance Analysis",
             "Benchmark Comparison"
         ],
-        icons=[
-            "gear",          # Portfolio Setup
-            "bar-chart",     # Overview
-            "graph-up",      # Performance Analysis
-            "activity",      # Benchmark Comparison
-        ],
-        menu_icon="layers" ,  
+        icons=["gear", "bar-chart", "graph-up", "activity"],
+        menu_icon="layers",  
         default_index=0
     )
 
@@ -45,6 +40,8 @@ if 'portfolio_data' not in st.session_state:
     st.session_state.portfolio_data = None
 if 'metrics' not in st.session_state:
     st.session_state.metrics = {}
+if 'ticker_weights' not in st.session_state:
+    st.session_state.ticker_weights = {}
 
 # ------------------------
 # Utility Functions
@@ -54,25 +51,20 @@ def download_data(tickers, start, end):
     return data
 
 def calculate_metrics(prices, weights, risk_free_rate):
-    # 1. Portfolio value (buy and hold)
     normalized_prices = prices / prices.iloc[0]
     portfolio = (prices * weights).sum(axis=1)
-    #portfolio = (normalized_prices * weights).sum(axis=1)
 
-    # 2. CAGR (Buy and Hold)
     initial_value = portfolio.iloc[0]
     final_value = portfolio.iloc[-1]
     days = (portfolio.index[-1] - portfolio.index[0]).days
     years = days / 365.25
     cagr = ((final_value / initial_value) ** (1 / years)) - 1
 
-    # 3. Volatility and Sharpe Ratio 
     daily_returns = portfolio.pct_change().dropna()
     annual_risk = daily_returns.std() * np.sqrt(252)
     annual_return = daily_returns.mean() * 252
     sharpe = (annual_return - risk_free_rate / 100) / annual_risk if annual_risk != 0 else np.nan
 
-    # 4. Drawdown
     roll_max = portfolio.cummax()
     drawdown = (portfolio - roll_max) / roll_max
     max_drawdown = drawdown.min()
@@ -86,7 +78,6 @@ def calculate_metrics(prices, weights, risk_free_rate):
         'Max Drawdown': max_drawdown
     }
 
-
 # ------------------------
 # Page 1: Portfolio Setup
 # ------------------------
@@ -96,12 +87,13 @@ if selected_page == "Portfolio Setup":
         "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
         "SBIN.NS", "LT.NS", "AXISBANK.NS", "ITC.NS", "BHARTIARTL.NS"
     ])
-    
-    weights = []
+
     if tickers:
-        st.subheader("Assign Weights (Total should be 100)")
-        for t in tickers:
-            weights.append(st.number_input(f"Weight for {t}", 0.0, 100.0, 10.0))
+        st.subheader("Assign Weights (Total should be 100%)")
+        st.session_state.ticker_weights = {}
+        for ticker in tickers:
+            weight = st.number_input(f"Weight for {ticker}", 0.0, 100.0, 10.0, key=f"weight_{ticker}")
+            st.session_state.ticker_weights[ticker] = weight
 
     capital = st.number_input("Investment Amount (₹)", 100.0, 1e7, 100000.0)
     start_date = st.date_input("Start Date", datetime(2019, 1, 1))
@@ -109,15 +101,18 @@ if selected_page == "Portfolio Setup":
     risk_free = st.number_input("Risk-Free Rate (%)", 0.0, 10.0, 7.0)
 
     if st.button("Run Analysis"):
-        if round(sum(weights), 2) != 100:
+        total_weight = sum(st.session_state.ticker_weights.values())
+        if round(total_weight, 2) != 100.0:
             st.error("Total weights must sum up to 100")
         else:
-            weights_arr = np.array(weights) / 100
-            prices = download_data(tickers, start_date, end_date)
+            selected_tickers = list(st.session_state.ticker_weights.keys())
+            weights_arr = np.array([st.session_state.ticker_weights[t] for t in selected_tickers]) / 100
+
+            prices = download_data(selected_tickers, start_date, end_date)
             st.session_state.portfolio_data = {
                 'prices': prices,
                 'weights': weights_arr,
-                'tickers': tickers
+                'tickers': selected_tickers
             }
             st.session_state.metrics = calculate_metrics(prices, weights_arr, risk_free)
             st.session_state.capital = capital 
@@ -138,27 +133,21 @@ elif selected_page == "Portfolio Overview":
 
         initial_investment = st.session_state.capital
         final_value = initial_investment * (portfolio_value.iloc[-1] / portfolio_value.iloc[0])
-
-        # Calculate percentage gain/loss
         percentage_change = ((final_value - initial_investment) / initial_investment) * 100
 
-        # Display initial investment, final value, and percentage gain/loss
         st.metric(
             label=f"Final Value of ₹{initial_investment:,.0f} Investment", 
             value=f"₹{final_value:,.2f}",  
-            delta=f"{percentage_change:,.2f}%" if percentage_change >= 0 else f"-{abs(percentage_change):,.2f}%"  # Shows percentage change
+            delta=f"{percentage_change:,.2f}%" if percentage_change >= 0 else f"-{abs(percentage_change):,.2f}%"
         )
 
-
         st.subheader("Normalized Close Prices Over Time")
-        
         tickers = norm_prices.columns.tolist()
         colors = pc.qualitative.Plotly 
         color_map = {ticker: colors[i % len(colors)] for i, ticker in enumerate(tickers)}
 
         fig = go.Figure()
 
-        # Individual tickers
         for ticker in tickers:
             fig.add_trace(go.Scatter(
                 x=norm_prices.index,
@@ -168,7 +157,6 @@ elif selected_page == "Portfolio Overview":
                 line=dict(color=color_map[ticker])
             ))
 
-        # Normalized portfolio trace
         norm_portfolio = (norm_prices * data['weights']).sum(axis=1)
         fig.add_trace(go.Scatter(
             x=norm_portfolio.index,
@@ -184,13 +172,10 @@ elif selected_page == "Portfolio Overview":
             template="plotly_white",
             height=500
         )
-
         st.plotly_chart(fig, use_container_width=True)
 
-
-        # Pie Chart
         st.subheader("Portfolio Allocation")
-        pie_data = pd.Series(data['weights'], index=data['tickers'])
+        pie_data = pd.Series([st.session_state.ticker_weights[t] for t in data['tickers']], index=data['tickers'])
         pie_colors = [color_map[ticker] for ticker in pie_data.index]
 
         pie_fig = go.Figure(data=[go.Pie(
@@ -217,7 +202,6 @@ elif selected_page == "Performance Analysis":
         col3.metric("Sharpe Ratio", f"{metrics['Sharpe Ratio']:.2f}")
         col4.metric("Max Drawdown", f"{metrics['Max Drawdown']*100:.2f}%")
 
-        # Cumulative returns
         cumulative_returns = (1 + metrics['returns']).cumprod() - 1
 
         st.subheader("Cumulative Return of Portfolio")
@@ -231,15 +215,12 @@ elif selected_page == "Performance Analysis":
         ))
 
         fig.update_layout(
-            #title="Cumulative Return of Portfolio",
             xaxis_title="Date",
             yaxis_title="Cumulative Return",
             template="plotly_white",
             height=500
         )
-
         st.plotly_chart(fig, use_container_width=True)
-
 
 # ------------------------
 # Page 4: Benchmark Comparison
@@ -247,43 +228,30 @@ elif selected_page == "Performance Analysis":
 elif selected_page == "Benchmark Comparison":
     st.title("Benchmark Comparison")
 
-     # Brief explanation about SENSEX and NIFTY 50
-    st.markdown(
-        """
-        **NIFTY 50**: The **NIFTY 50** is a stock market index representing the top 50 companies listed on the National Stock Exchange (NSE).
-        
-        **SENSEX**: The **SENSEX** is a stock market index consisting of 30 established companies listed on the Bombay Stock Exchange (BSE).
-        """
-    )
+    st.markdown("""
+        **NIFTY 50**: Represents the top 50 companies listed on NSE.  
+        **SENSEX**: Represents 30 well-established companies on BSE.
+    """)
 
     if not st.session_state.portfolio_data:
         st.warning("Please complete portfolio setup.")
     else:
-        portfolio = st.session_state.metrics['portfolio']  
+        portfolio = st.session_state.metrics['portfolio']
         
-        # NIFTY 50 data
         nifty_data = yf.download("^NSEI", start=portfolio.index[0], end=portfolio.index[-1])
-        nifty_close = nifty_data['Close'].squeeze()  
-        nifty_norm = nifty_close / nifty_close.iloc[0]  
-
-        # SENSEX data
         sensex_data = yf.download("^BSESN", start=portfolio.index[0], end=portfolio.index[-1])
-        sensex_close = sensex_data['Close'].squeeze() 
-        sensex_norm = sensex_close / sensex_close.iloc[0]  
 
+        nifty_norm = nifty_data['Close'] / nifty_data['Close'].iloc[0]
+        sensex_norm = sensex_data['Close'] / sensex_data['Close'].iloc[0]
         portfolio_norm = portfolio / portfolio.iloc[0]
-        
-        # portfolio, SENSEX and NIFTY data for comparison
+
         compare_df = pd.DataFrame({
             'Portfolio': portfolio_norm,
             'NIFTY 50': nifty_norm,
             'SENSEX': sensex_norm
         })
 
-        # Comparison chart
-        #st.line_chart(compare_df)
         fig = go.Figure()
-
         for column in compare_df.columns:
             fig.add_trace(go.Scatter(
                 x=compare_df.index,
@@ -298,5 +266,4 @@ elif selected_page == "Benchmark Comparison":
             template="plotly_white",
             height=500
         )
-
         st.plotly_chart(fig, use_container_width=True)
