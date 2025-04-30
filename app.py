@@ -55,12 +55,9 @@ def download_data(tickers, start, end):
 
 def calculate_metrics(prices, weights, risk_free_rate):
     # 1. Portfolio value (buy and hold)
-    if prices.empty: 
-        st.error("Prices DataFrame is empty. Please check the input data.")
-    else:
-        normalized_prices = prices / prices.iloc[0]
-        portfolio = (prices * weights).sum(axis=1)
-        #portfolio = (normalized_prices * weights).sum(axis=1)
+    normalized_prices = prices / prices.iloc[0]
+    portfolio = (prices * weights).sum(axis=1)
+    #portfolio = (normalized_prices * weights).sum(axis=1)
 
     # 2. CAGR (Buy and Hold)
     initial_value = portfolio.iloc[0]
