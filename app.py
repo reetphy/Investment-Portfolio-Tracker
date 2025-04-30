@@ -50,7 +50,15 @@ if 'metrics' not in st.session_state:
 # Utility Functions
 # ------------------------
 def download_data(tickers, start, end):
+    st.info(f"📥 Downloading data for: {', '.join(tickers)} from {start} to {end}...")
     data = yf.download(tickers, start=start, end=end)['Close']
+    
+    if data.empty:
+        st.error("❌ No data was downloaded. Check your ticker symbols or date range.")
+    else:
+        st.success(f"✅ Data downloaded successfully for {len(data.columns)} ticker(s) and {len(data)} days.")
+        st.dataframe(data.tail())  # Show last few rows as a quick check
+    
     return data
 
 def calculate_metrics(prices, weights, risk_free_rate):
